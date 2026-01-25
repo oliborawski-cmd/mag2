@@ -1,122 +1,86 @@
 import streamlit as st
+import os
 
-# --- Konfiguracja Strony i Tytuł ---
+# --- Konfiguracja Strony ---
 st.set_page_config(
     layout="wide", 
-    page_title="📦 Wizualny Magazyn",
+    page_title="📦 Magazyn GitHub Ready",
     initial_sidebar_state="collapsed"
 )
 
-# --- Inicjalizacja Danych (Stan) ---
+DB_FILE = "inventory_db.txt"
 
-if 'inventory_container' not in st.session_state:
-    st.session_state['inventory_container'] = st.empty()
-    # Dodano emotikony do początkowych danych
-    st.session_state['inventory'] = ["🔨 Młotek", "🪛 Wkrętarka", "🔩 Śruby M8"] 
+# --- Funkcje Obsługi Pliku (Baza Danych) ---
 
-# Pobieranie aktualnej listy towarów
+def load_data():
+    """Wczytuje dane z pliku tekstowego przy starcie."""
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "r", encoding="utf-8") as f:
+            # Usuwamy puste linie i białe znaki
+            return [line.strip() for line in f.readlines() if line.strip()]
+    return ["🔨 Młotek", "🪛 Wkrętarka", "🔩 Śruby M8"]
+
+def save_data():
+    """Zapisuje aktualny stan magazynu do pliku."""
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        for item in st.session_state['inventory']:
+            f.write(f"{item}\n")
+
+# --- Inicjalizacja Stanu Sesji ---
+if 'inventory' not in st.session_state:
+    st.session_state['inventory'] = load_data()
+
+# --- Logika Magazynu ---
+
+def add_item():
+    name = st.session_state.new_item_input.strip()
+    if name:
+        full_name = f"📦 {name}"
+        if full_name not in st.session_state['inventory']:
+            st.session_state['inventory'].append(full_name)
+            save_data()  # Zapisujemy do pliku
+            st.toast(f"Dodano: {name}", icon="✅")
+        else:
+            st.warning("Produkt już istnieje!")
+        st.session_state.new_item_input = "" # Czyszczenie pola
+
+def remove_item(item):
+    st.session_state['inventory'].remove(item)
+    save_data()  # Zapisujemy po usunięciu
+    st.toast(f"Usunięto: {item}", icon="🗑️")
+
+# --- Interfejs (UI) ---
+
+st.title("🌟 Magazyn w Chmurze")
+st.info("Dane są automatycznie zapisywane w pliku `inventory_db.txt` na serwerze.")
+
+# Statystyki i Szukajka
 inventory = st.session_state['inventory']
-
-# --- Funkcje Logiki Magazynu ---
-
-def add_item(item_name):
-    """Dodaje towar do listy, jeśli pole nie jest puste."""
-    if item_name:
-        # Dodajemy ikonę paczki do nowo dodawanego elementu
-        formatted_item = f"📦 {item_name.strip()}"
-        inventory.append(formatted_item)
-        st.session_state['inventory'] = inventory
-        st.success(f"✅ Dodano towar: **{item_name}**")
-    else:
-        st.warning("⚠️ Nazwa towaru nie może być pusta.")
-
-def remove_item(item_name):
-    """Usuwa towar z listy."""
-    try:
-        inventory.remove(item_name)
-        st.session_state['inventory'] = inventory
-        # Użycie st.error (czerwony) jako mocniejszy kolor usuwania
-        st.error(f"🗑️ Usunięto towar: **{item_name.replace('📦 ', '')}**") 
-    except ValueError:
-        st.error(f"❌ Błąd: Towar **{item_name.replace('📦 ', '')}** nie znajduje się na liście.")
-
-# --- Interfejs Użytkownika Streamlit ---
-
-st.title("🌟 Wizualny Magazyn Narzędzi")
-st.caption("Stan magazynu utrzymywany dynamicznie w pamięci aplikacji.")
-
-# --- Wizualizacja Stanu Magazynu (Panel informacyjny) ---
-
-col_info_1, col_info_2 = st.columns(2)
-
-col_info_1.info(f"🔢 Aktualna liczba unikalnych towarów: **{len(inventory)}**")
-
-if len(inventory) > 5:
-    col_info_2.success("✨ Magazyn dobrze zaopatrzony! Kontynuuj dobrą pracę.")
-else:
-    col_info_2.warning("⏳ Magazyn wymaga uzupełnienia. Dodaj więcej towarów.")
+c1, c2 = st.columns([2, 1])
+c1.metric("Suma towarów", len(inventory))
+search = c2.text_input("🔍 Filtruj listę...", placeholder="Szukaj...")
 
 st.divider()
 
-# --- Panel Dodawania Towaru (Użycie Koloru Głównego) ---
+# Dodawanie
+with st.container():
+    col1, col2 = st.columns([4, 1])
+    col1.text_input("Nazwa towaru:", key="new_item_input", on_change=add_item, placeholder="Wpisz nazwę i naciśnij Enter...")
+    if col2.button("➕ DODAJ", type="primary", use_container_width=True):
+        add_item()
 
-with st.expander("➕ Dodaj Nowy Towar", expanded=True):
-    col1, col2 = st.columns([3, 1])
-    
-    new_item_name = col1.text_input(
-        "Nazwa Towaru:", 
-        key="new_item_input", 
-        label_visibility="collapsed", 
-        placeholder="Wpisz nazwę towaru (np. 'Klucz płaski')..."
-    )
-    
-    # Przycisk w kolorze "primary" (domyślny niebieski/zielony)
-    col2.button(
-        "➡️ DODAJ", 
-        on_click=add_item, 
-        args=(new_item_name,), 
-        type="primary",
-        use_container_width=True
-    )
+st.write("##")
 
-st.divider()
+# Wyświetlanie listy
+filtered_items = [i for i in inventory if search.lower() in i.lower()]
 
-# --- Lista Magazynowa i Usuwanie (Kolorowe Wiersze) ---
-
-st.header("📋 Aktualny Stan Magazynu")
-
-if inventory:
-    # Nagłówki kolumn
-    col_index_head, col_item_head, col_btn_head = st.columns([0.5, 4.5, 1])
-    col_item_head.subheader("Towar")
-    col_btn_head.subheader("Akcja")
-    
-    st.markdown("---")
-
-    # Tworzenie dynamicznej listy towarów z przyciskami do usuwania
-    for i, item in enumerate(inventory):
-        col_index, col_item, col_btn = st.columns([0.5, 4.5, 1])
-        
-        # Użycie kolorowego kontenera dla lepszej wizualizacji wiersza
-        with col_item:
-            st.markdown(f"### {item}") # Większy tekst dla towaru
-        
-        col_index.metric(label="#", value=i+1, delta_color="off")
-        
-        # Przycisk usuwania w kolorze "secondary" (szary/czerwony)
-        col_btn.button(
-            "✖️ Usuń", 
-            key=f"remove_btn_{i}", 
-            on_click=remove_item, 
-            args=(item,),
-            type="secondary",
-            use_container_width=True
-        )
-    
-    st.markdown("---")
-
+if filtered_items:
+    for idx, item in enumerate(filtered_items):
+        row_col1, row_col2, row_col3 = st.columns([0.5, 4.5, 1])
+        row_col1.write(f"#{idx+1}")
+        row_col2.subheader(item)
+        if row_col3.button("Usuń", key=f"del_{item}", use_container_width=True):
+            remove_item(item)
+            st.rerun()
 else:
-    st.error("🚨 Magazyn jest PUSTY! Proszę dodać towar, aby rozpocząć pracę.")
-
-# Użycie ukrytego kontenera, aby Streamlit "pamiętał" listę
-st.session_state['inventory_container'].empty()
+    st.write("Brak towarów w magazynie.")
