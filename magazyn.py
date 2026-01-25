@@ -1,100 +1,122 @@
 import streamlit as st
-import pandas as pd
-import os
-import json
 
-# --- Konfiguracja ---
-st.set_page_config(layout="wide", page_title="📦 Magazyn Finansowy PRO")
+# --- Konfiguracja Strony i Tytuł ---
+st.set_page_config(
+    layout="wide", 
+    page_title="📦 Wizualny Magazyn",
+    initial_sidebar_state="collapsed"
+)
 
-DB_FILE = "inventory_data.json"
+# --- Inicjalizacja Danych (Stan) ---
 
-# --- Zarządzanie Danymi ---
-def load_data():
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return [
-        {"nazwa": "Młotek", "ilosc": 5, "cena": 45.0},
-        {"nazwa": "Wkrętarka", "ilosc": 2, "cena": 350.0}
-    ]
+if 'inventory_container' not in st.session_state:
+    st.session_state['inventory_container'] = st.empty()
+    # Dodano emotikony do początkowych danych
+    st.session_state['inventory'] = ["🔨 Młotek", "🪛 Wkrętarka", "🔩 Śruby M8"] 
 
-def save_data():
-    with open(DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(st.session_state['inventory'], f, indent=4, ensure_ascii=False)
+# Pobieranie aktualnej listy towarów
+inventory = st.session_state['inventory']
 
-if 'inventory' not in st.session_state:
-    st.session_state['inventory'] = load_data()
+# --- Funkcje Logiki Magazynu ---
 
-# --- Funkcje Logiki ---
-def add_item(name, qty, price):
-    if name:
-        new_item = {"nazwa": name, "ilosc": qty, "cena": price}
-        st.session_state['inventory'].append(new_item)
-        save_data()
-        st.toast(f"Dodano {name}", icon="✅")
+def add_item(item_name):
+    """Dodaje towar do listy, jeśli pole nie jest puste."""
+    if item_name:
+        # Dodajemy ikonę paczki do nowo dodawanego elementu
+        formatted_item = f"📦 {item_name.strip()}"
+        inventory.append(formatted_item)
+        st.session_state['inventory'] = inventory
+        st.success(f"✅ Dodano towar: **{item_name}**")
     else:
-        st.error("Nazwa nie może być pusta!")
+        st.warning("⚠️ Nazwa towaru nie może być pusta.")
 
-def remove_item(index):
-    del st.session_state['inventory'][index]
-    save_data()
-    st.rerun()
+def remove_item(item_name):
+    """Usuwa towar z listy."""
+    try:
+        inventory.remove(item_name)
+        st.session_state['inventory'] = inventory
+        # Użycie st.error (czerwony) jako mocniejszy kolor usuwania
+        st.error(f"🗑️ Usunięto towar: **{item_name.replace('📦 ', '')}**") 
+    except ValueError:
+        st.error(f"❌ Błąd: Towar **{item_name.replace('📦 ', '')}** nie znajduje się na liście.")
 
-# --- Interfejs Użytkownika (Dashboard) ---
-st.title("📊 Magazyn z Analizą Kosztów")
+# --- Interfejs Użytkownika Streamlit ---
 
-# Obliczenia
-inv = st.session_state['inventory']
-total_items = sum(item['ilosc'] for item in inv)
-total_value = sum(item['ilosc'] * item['cena'] for item in inv)
-avg_price = total_value / len(inv) if inv else 0
+st.title("🌟 Wizualny Magazyn Narzędzi")
+st.caption("Stan magazynu utrzymywany dynamicznie w pamięci aplikacji.")
 
-# --- Panel Statystyk ---
-col_s1, col_s2, col_s3 = st.columns(3)
-col_s1.metric("Suma sztuk", f"{total_items} szt.")
-col_s2.metric("Wartość magazynu", f"{total_value:,.2f} PLN")
-col_s3.metric("Średnia wartość produktu", f"{avg_price:,.2f} PLN")
+# --- Wizualizacja Stanu Magazynu (Panel informacyjny) ---
+
+col_info_1, col_info_2 = st.columns(2)
+
+col_info_1.info(f"🔢 Aktualna liczba unikalnych towarów: **{len(inventory)}**")
+
+if len(inventory) > 5:
+    col_info_2.success("✨ Magazyn dobrze zaopatrzony! Kontynuuj dobrą pracę.")
+else:
+    col_info_2.warning("⏳ Magazyn wymaga uzupełnienia. Dodaj więcej towarów.")
 
 st.divider()
 
-# --- Formularz Dodawania ---
-with st.expander("➕ Dodaj nowy towar do bazy", expanded=True):
-    with st.form("add_form", clear_on_submit=True):
-        c1, c2, c3 = st.columns([3, 1, 1])
-        name = c1.text_input("Nazwa przedmiotu", placeholder="Np. Kabel miedziany")
-        qty = c2.number_input("Ilość", min_value=1, value=1)
-        price = c3.number_input("Cena za szt. (PLN)", min_value=0.0, value=0.0, step=0.5)
-        
-        if st.form_submit_button("DODAJ DO EWIDENCJI", use_container_width=True):
-            add_item(name, qty, price)
-            st.rerun()
+# --- Panel Dodawania Towaru (Użycie Koloru Głównego) ---
 
-st.write("##")
+with st.expander("➕ Dodaj Nowy Towar", expanded=True):
+    col1, col2 = st.columns([3, 1])
+    
+    new_item_name = col1.text_input(
+        "Nazwa Towaru:", 
+        key="new_item_input", 
+        label_visibility="collapsed", 
+        placeholder="Wpisz nazwę towaru (np. 'Klucz płaski')..."
+    )
+    
+    # Przycisk w kolorze "primary" (domyślny niebieski/zielony)
+    col2.button(
+        "➡️ DODAJ", 
+        on_click=add_item, 
+        args=(new_item_name,), 
+        type="primary",
+        use_container_width=True
+    )
 
-# --- Tabela i Zarządzanie ---
-st.header("📋 Wykaz Towarów")
+st.divider()
 
-if inv:
-    # Nagłówki
-    h1, h2, h3, h4, h5 = st.columns([3, 1, 1, 1, 1])
-    h1.write("**Produkt**")
-    h2.write("**Ilość**")
-    h3.write("**Cena j.**")
-    h4.write("**Wartość**")
-    h5.write("**Akcja**")
+# --- Lista Magazynowa i Usuwanie (Kolorowe Wiersze) ---
+
+st.header("📋 Aktualny Stan Magazynu")
+
+if inventory:
+    # Nagłówki kolumn
+    col_index_head, col_item_head, col_btn_head = st.columns([0.5, 4.5, 1])
+    col_item_head.subheader("Towar")
+    col_btn_head.subheader("Akcja")
+    
     st.markdown("---")
 
-    for idx, item in enumerate(inv):
-        c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 1])
-        c1.markdown(f"**{item['nazwa']}**")
-        c2.write(f"{item['ilosc']} szt.")
-        c3.write(f"{item['cena']:.2f} PLN")
+    # Tworzenie dynamicznej listy towarów z przyciskami do usuwania
+    for i, item in enumerate(inventory):
+        col_index, col_item, col_btn = st.columns([0.5, 4.5, 1])
         
-        wartosc = item['ilosc'] * item['cena']
-        c4.write(f"**{wartosc:.2f} PLN**")
+        # Użycie kolorowego kontenera dla lepszej wizualizacji wiersza
+        with col_item:
+            st.markdown(f"### {item}") # Większy tekst dla towaru
         
-        if c5.button("Usuń", key=f"del_{idx}", type="secondary", use_container_width=True):
-            remove_item(idx)
-else:
-    st.info("Brak towarów. Użyj powyższego formularza, aby zasilić magazyn.")
+        col_index.metric(label="#", value=i+1, delta_color="off")
+        
+        # Przycisk usuwania w kolorze "secondary" (szary/czerwony)
+        col_btn.button(
+            "✖️ Usuń", 
+            key=f"remove_btn_{i}", 
+            on_click=remove_item, 
+            args=(item,),
+            type="secondary",
+            use_container_width=True
+        )
     
+    st.markdown("---")
+
+else:
+    st.error("🚨 Magazyn jest PUSTY! Proszę dodać towar, aby rozpocząć pracę.")
+
+# Użycie ukrytego kontenera, aby Streamlit "pamiętał" listę
+st.session_state['inventory_container'].empty()
