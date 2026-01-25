@@ -1,87 +1,100 @@
-
 import streamlit as st
+import pandas as pd
 import os
+import json
 
-# --- Konfiguracja Strony ---
-st.set_page_config(
-    layout="wide", 
-    page_title="📦 Magazyn GitHub Ready",
-    initial_sidebar_state="collapsed"
-)
+# --- Konfiguracja ---
+st.set_page_config(layout="wide", page_title="📦 Magazyn Finansowy PRO")
 
-DB_FILE = "inventory_db.txt"
+DB_FILE = "inventory_data.json"
 
-# --- Funkcje Obsługi Pliku (Baza Danych) ---
-
+# --- Zarządzanie Danymi ---
 def load_data():
-    """Wczytuje dane z pliku tekstowego przy starcie."""
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r", encoding="utf-8") as f:
-            # Usuwamy puste linie i białe znaki
-            return [line.strip() for line in f.readlines() if line.strip()]
-    return ["🔨 Młotek", "🪛 Wkrętarka", "🔩 Śruby M8"]
+            return json.load(f)
+    return [
+        {"nazwa": "Młotek", "ilosc": 5, "cena": 45.0},
+        {"nazwa": "Wkrętarka", "ilosc": 2, "cena": 350.0}
+    ]
 
 def save_data():
-    """Zapisuje aktualny stan magazynu do pliku."""
     with open(DB_FILE, "w", encoding="utf-8") as f:
-        for item in st.session_state['inventory']:
-            f.write(f"{item}\n")
+        json.dump(st.session_state['inventory'], f, indent=4, ensure_ascii=False)
 
-# --- Inicjalizacja Stanu Sesji ---
 if 'inventory' not in st.session_state:
     st.session_state['inventory'] = load_data()
 
-# --- Logika Magazynu ---
-
-def add_item():
-    name = st.session_state.new_item_input.strip()
+# --- Funkcje Logiki ---
+def add_item(name, qty, price):
     if name:
-        full_name = f"📦 {name}"
-        if full_name not in st.session_state['inventory']:
-            st.session_state['inventory'].append(full_name)
-            save_data()  # Zapisujemy do pliku
-            st.toast(f"Dodano: {name}", icon="✅")
-        else:
-            st.warning("Produkt już istnieje!")
-        st.session_state.new_item_input = "" # Czyszczenie pola
+        new_item = {"nazwa": name, "ilosc": qty, "cena": price}
+        st.session_state['inventory'].append(new_item)
+        save_data()
+        st.toast(f"Dodano {name}", icon="✅")
+    else:
+        st.error("Nazwa nie może być pusta!")
 
-def remove_item(item):
-    st.session_state['inventory'].remove(item)
-    save_data()  # Zapisujemy po usunięciu
-    st.toast(f"Usunięto: {item}", icon="🗑️")
+def remove_item(index):
+    del st.session_state['inventory'][index]
+    save_data()
+    st.rerun()
 
-# --- Interfejs (UI) ---
+# --- Interfejs Użytkownika (Dashboard) ---
+st.title("📊 Magazyn z Analizą Kosztów")
 
-st.title("🌟 Magazyn w Chmurze")
-st.info("Dane są automatycznie zapisywane w pliku `inventory_db.txt` na serwerze.")
+# Obliczenia
+inv = st.session_state['inventory']
+total_items = sum(item['ilosc'] for item in inv)
+total_value = sum(item['ilosc'] * item['cena'] for item in inv)
+avg_price = total_value / len(inv) if inv else 0
 
-# Statystyki i Szukajka
-inventory = st.session_state['inventory']
-c1, c2 = st.columns([2, 1])
-c1.metric("Suma towarów", len(inventory))
-search = c2.text_input("🔍 Filtruj listę...", placeholder="Szukaj...")
+# --- Panel Statystyk ---
+col_s1, col_s2, col_s3 = st.columns(3)
+col_s1.metric("Suma sztuk", f"{total_items} szt.")
+col_s2.metric("Wartość magazynu", f"{total_value:,.2f} PLN")
+col_s3.metric("Średnia wartość produktu", f"{avg_price:,.2f} PLN")
 
 st.divider()
 
-# Dodawanie
-with st.container():
-    col1, col2 = st.columns([4, 1])
-    col1.text_input("Nazwa towaru:", key="new_item_input", on_change=add_item, placeholder="Wpisz nazwę i naciśnij Enter...")
-    if col2.button("➕ DODAJ", type="primary", use_container_width=True):
-        add_item()
+# --- Formularz Dodawania ---
+with st.expander("➕ Dodaj nowy towar do bazy", expanded=True):
+    with st.form("add_form", clear_on_submit=True):
+        c1, c2, c3 = st.columns([3, 1, 1])
+        name = c1.text_input("Nazwa przedmiotu", placeholder="Np. Kabel miedziany")
+        qty = c2.number_input("Ilość", min_value=1, value=1)
+        price = c3.number_input("Cena za szt. (PLN)", min_value=0.0, value=0.0, step=0.5)
+        
+        if st.form_submit_button("DODAJ DO EWIDENCJI", use_container_width=True):
+            add_item(name, qty, price)
+            st.rerun()
 
 st.write("##")
 
-# Wyświetlanie listy
-filtered_items = [i for i in inventory if search.lower() in i.lower()]
+# --- Tabela i Zarządzanie ---
+st.header("📋 Wykaz Towarów")
 
-if filtered_items:
-    for idx, item in enumerate(filtered_items):
-        row_col1, row_col2, row_col3 = st.columns([0.5, 4.5, 1])
-        row_col1.write(f"#{idx+1}")
-        row_col2.subheader(item)
-        if row_col3.button("Usuń", key=f"del_{item}", use_container_width=True):
-            remove_item(item)
-            st.rerun()
+if inv:
+    # Nagłówki
+    h1, h2, h3, h4, h5 = st.columns([3, 1, 1, 1, 1])
+    h1.write("**Produkt**")
+    h2.write("**Ilość**")
+    h3.write("**Cena j.**")
+    h4.write("**Wartość**")
+    h5.write("**Akcja**")
+    st.markdown("---")
+
+    for idx, item in enumerate(inv):
+        c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 1])
+        c1.markdown(f"**{item['nazwa']}**")
+        c2.write(f"{item['ilosc']} szt.")
+        c3.write(f"{item['cena']:.2f} PLN")
+        
+        wartosc = item['ilosc'] * item['cena']
+        c4.write(f"**{wartosc:.2f} PLN**")
+        
+        if c5.button("Usuń", key=f"del_{idx}", type="secondary", use_container_width=True):
+            remove_item(idx)
 else:
-    st.write("Brak towarów w magazynie.")
+    st.info("Brak towarów. Użyj powyższego formularza, aby zasilić magazyn.")
+    
